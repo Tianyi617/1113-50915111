@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Google 認證與會員管理</title>
+    <!-- 引入 Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            margin-top: 20px;
+        }
+
+        h1 {
+            color: #00012882;
+            margin-bottom: 30px;
+        }
+
+        .btn-custom {
+            width: 180px;
+            margin: 10px;
+        }
+
+        .user-info {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .user-photo {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: 2px solid #4CAF50;
+        }
+
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+
+        .alert {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container text-center">
+        <h1>Google認證與會員登入</h1>
+
+        <div id="alertBox" class="alert alert-danger"></div>
+        <div id="loadingSpinner" class="spinner-border text-primary" role="status" style="display: none;">
+            <span class="visually-hidden">載入中...</span>
+        </div>
+
+        <!-- 功能選擇按鈕 -->
+        <div class="row justify-content-center">
+            <div class="col-12 col-md-4">
+                <button class="btn btn-success btn-custom w-100" onclick="googleRegister()">註冊會員</button>
+            </div>
+            <div class="col-12 col-md-4">
+                <button class="btn btn-primary btn-custom w-100" onclick="googleLogin()">登入會員</button>
+            </div>
+            <div class="col-12 col-md-4">
+                <button class="btn btn-info btn-custom w-100" onclick="displayUserInfoFromDB()">顯示資訊</button>
+            </div>
+            <div class="col-12 col-md-4">
+                <button class="btn btn-danger btn-custom w-100" onclick="googleSignOut()">登出</button>
+            </div>
+        </div>
+
+        <!-- 顯示用戶資訊 -->
+        <div id="userInfo" class="user-info mt-4" style="display: none;">
+            <h3>用戶資料</h3>
+            <p><strong>姓名:</strong> <span id="userName"></span></p>
+            <p><strong>Email:</strong> <span id="userEmail"></span></p>
+            <p><strong>最後登入時間:</strong> <span id="lastLogin"></span></p>
+            <p><strong>用戶 ID:</strong> <span id="userID"></span></p>
+            <p><strong>註冊時間:</strong> <span id="userCreationTime"></span></p>
+            <img id="userPhoto" class="user-photo" src="" alt="User photo">
+        </div>
+    </div>
+
+    <!-- 引入 Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+        import { getDatabase, ref, set, get, update } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyA6nJBP4oFi7OXGACENdLr2pGaDuP_Kua0",
+            authDomain: "project-4922570573212354646.firebaseapp.com",
+            databaseURL: "https://project-4922570573212354646-default-rtdb.asia-southeast1.firebasedatabase.app/",
+            projectId: "project-4922570573212354646",
+            storageBucket: "project-4922570573212354646.firebasestorage.app",
+            messagingSenderId: "256731065015",
+            appId: "1:256731065015:web:1a8588ca098a09d8183b32"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const database = getDatabase(app);
+
+        function googleRegister() {
+            const provider = new GoogleAuthProvider();
+            signInWithPopup(auth, provider)
+                .then((result) => {
+                    const user = result.user;
+
+                    // 檢查用戶是否已經註冊
+                    get(ref(database, `users/${user.uid}`))
+                        .then((snapshot) => {
+                            if (snapshot.exists()) {
+                                // 如果用戶已經存在，顯示提示而不註冊
+                                alert("該會員已經註冊過，無需再次註冊！");
+                                displayUserInfo(user);
+                            } else {
+                                // 如果用戶尚未註冊，則進行註冊
+                                set(ref(database, `users/${user.uid}`), {
+                                    name: user.displayName,
+                                    email: user.email,
+                                    photoURL: user.photoURL,
+                                    lastLogin: new Date().toISOString()
+                                }).then(() => {
+                                    alert("會員註冊成功！");
+                                    displayUserInfo(user);
+                                }).catch((error) => console.error("會員註冊失敗:", error.message));
+                            }
+                        })
+                        .catch((error) => console.error("檢查會員資料失敗:", error.message));
+                })
+                .catch((error) => alert("註冊失敗: " + error.message));
+        }
+
+
+        function googleLogin() {
+            const provider = new GoogleAuthProvider();
+            signInWithPopup(auth, provider)
+                .then((result) => {
+                    const user = result.user;
+
+                    // 檢查該用戶是否已經註冊
+                    get(ref(database, `users/${user.uid}`))
+                        .then((snapshot) => {
+                            if (snapshot.exists()) {
+                                // 如果用戶資料存在，表示已註冊，更新登入時間並顯示資料
+                                update(ref(database, `users/${user.uid}`), {
+                                    lastLogin: new Date().toISOString()
+                                }).then(() => {
+                                    alert("登入成功！");
+                                    displayUserInfo(user);
+                                }).catch((error) => console.error("登入更新失敗:", error.message));
+                            } else {
+                                // 如果用戶資料不存在，提示用戶進行註冊
+                                alert("尚未註冊！請先註冊會員。");
+                            }
+                        })
+                        .catch((error) => console.error("檢查會員資料失敗:", error.message));
+                })
+                .catch((error) => alert("登入失敗: " + error.message));
+        }
+
+
+        function displayUserInfoFromDB() {
+            const user = auth.currentUser;
+            if (!user) {
+                alert("請先登入！");
+                return;
+            }
+            get(ref(database, `users/${user.uid}`))
+                .then((snapshot) => {
+                    if (snapshot.exists()) {
+                        const data = snapshot.val();
+                        document.getElementById("userName").textContent = data.name;
+                        document.getElementById("userEmail").textContent = data.email;
+                        document.getElementById("lastLogin").textContent = data.lastLogin;
+                        document.getElementById("userPhoto").src = data.photoURL;
+                        document.getElementById("userInfo").style.display = "block";
+                    } else {
+                        alert("尚未註冊！");
+                    }
+                })
+                .catch((error) => console.error("讀取會員資料失敗:", error.message));
+        }
+
+        function googleSignOut() {
+            signOut(auth)
+                .then(() => {
+                    // 隱藏顯示用戶資訊區塊
+                    document.getElementById("userInfo").style.display = "none";
+
+                    // 清空用戶資料顯示區塊
+                    document.getElementById("userName").textContent = "";
+                    document.getElementById("userEmail").textContent = "";
+                    document.getElementById("lastLogin").textContent = "";
+                    document.getElementById("userPhoto").src = "";
+
+                    // 根據需求，您可以選擇顯示訊息，或是做其他處理
+                    // 不再使用 alert() 顯示登出成功訊息
+                    // alert("登出成功！");
+                })
+                .catch((error) => console.error("登出失敗:", error.message));
+        }
+
+
+        window.googleRegister = googleRegister;
+        window.googleLogin = googleLogin;
+        window.displayUserInfoFromDB = displayUserInfoFromDB;
+        window.googleSignOut = googleSignOut;
+    </script>
+
+    <!-- 引入 Bootstrap JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>
